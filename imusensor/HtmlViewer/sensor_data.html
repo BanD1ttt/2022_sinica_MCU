@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sensor Data</title>
+
+    <style type="text/css">
+      #videoElement {
+        width: 800px;
+        height: 600px;
+        background-color: #666;
+      }
+      #DIV1{
+        float:left;
+      }
+    </style>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment-with-locales.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sprintf/1.1.2/sprintf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.8.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@1.8.0/dist/chartjs-plugin-streaming.min.js"></script>
+  </head>
+
+  <body>
+    <h1>SensorData</h1>
+    <button onclick="onStartButtonClick()">選擇裝置</button>
+    <br>
+    <button onclick="stop()">停止偵測</button>
+    <button onclick="restart()">重啟偵測</button>
+    <button class="downloadBtn">下載檔案</button>
+    <label>IMU data csv </label>
+    <br>
+    <textarea id="csvTextArea" cols="100" rows="300" readonly="readonly">t,qw,qx,qy,qz,ax,ay,az,gx,gy,gz</textarea >
+    <div id="DIV1">
+        <video autoplay="true" id="videoElement"></video>
+    </div>
+
+    <script>
+      const csvTextArea = document.getElementById("csvTextArea");
+      const headerLength = 4;
+      const imuDataId = 1;
+      const btnDataId = 2;
+      const precision = 5;
+      var csv_signal = 0;
+      
+      let writer;
+      let downloadBtn = document.querySelector(".downloadBtn");
+      downloadBtn.addEventListener("click", downloadFile);
+      
+      async function onStartButtonClick() {
+        try {
+          const port = await navigator.serial.requestPort();
+		      let buffer = [];
+          let nextDataId = 0;
+          let nextDataLen = 0;
+          await port.open({ baudRate: 115200 });
+          
+          while (port.readable) {
+            const reader = port.readable.getReader();
+            writer = port.writable.getWriter();
+
+            try {
+              while (true) {
+                const {value, done} = await reader.read();
+                if (done) {
+                    reader.releaseLock();
+                    writer.releaseLock();
+                    break;
+                }
+                // add new data
+                for (let i = 0; i < value.length; i++) {
+                    buffer.push(value[i]);
+                }
+
+                if (nextDataId == 0 || nextDataLen == 0) {
+                    // header
+                    if (buffer.length < 4) {
+                        continue;
+                    }
+                    const headerBuffer = new ArrayBuffer(headerLength);
+                    const header = new Uint8Array(headerBuffer);
+                    for (let i = 0; i < headerLength; i++) {
+                        header[i] = buffer[i];
+                    }
+                    const headerView = new DataView(headerBuffer);
+                    nextDataId = headerView.getUint16(0, true);
+                    nextDataLen = headerView.getUint16(2, true);
+                    // remove read data
+                    for (let i = 0; i < headerLength; i++) {
+                        buffer.shift();
+                    }
+                }
+                if (nextDataId > 0 && nextDataLen > 0) {
+                    // data
+                    if (buffer.length < nextDataLen) {
+                        continue;
+                    }
+                    const dataBuffer = new ArrayBuffer(nextDataLen);
+                    const data = new Uint8Array(dataBuffer);
+                    for (let i = 0; i < nextDataLen; i++) {
+                        data[i] = buffer[i];
+                    }
+                    const dataView = new DataView(dataBuffer);
+                    if (nextDataId == imuDataId) {
+                        let offset = 0;
+                        let t = dataView.getUint32(offset, true);   offset += 4;
+                        let ax = dataView.getFloat32(offset, true); offset += 4;
+                        let ay = dataView.getFloat32(offset, true); offset += 4;
+                        let az = dataView.getFloat32(offset, true); offset += 4;
+                        let gx = dataView.getFloat32(offset, true); offset += 4;
+                        let gy = dataView.getFloat32(offset, true); offset += 4;
+                        let gz = dataView.getFloat32(offset, true); offset += 4;
+                        let qw = dataView.getFloat32(offset, true); offset += 4;
+                        let qx = dataView.getFloat32(offset, true); offset += 4;
+                        let qy = dataView.getFloat32(offset, true); offset += 4;
+                        let qz = dataView.getFloat32(offset, true); offset += 4;
+                        //console.info(t, /*ax, ay, az, gx, gy, gz,*/ qw, qx, qy, qz);
+                        // graph
+                        if (csv_signal == 0){
+                          appendCsv(t, qw, qx, qy, qz, ax, ay, az, gx, gy, gz);
+                        }
+                    } else if (nextDataId == btnDataId) {
+                        let t = dataView.getUint32(true);
+                        let x = data[4];
+                        let btnA = (x & 0x01) != 0x00 ? "press" : "release";
+                        let btnB = (x & 0x02) != 0x00 ? "press" : "release";
+                        let btnC = (x & 0x04) != 0x00 ? "press" : "release";
+                        
+                        if (btnA == "release"){
+                          csv_signal = 1;
+                        }else{
+                          csv_signal = 0;
+                        }
+                        console.info("A is", btnA, "B is", btnB, "C is", btnC)
+                    } else {
+                        console.info("unknown data id", nextDataId);
+                    }
+                    // remove read data
+                    for (let i = 0; i < nextDataLen; i++) {
+                        buffer.shift();
+                    }
+                    nextDataId = 0;
+                    nextDataLen = 0;
+                }
+              }
+              await port.close();
+            } catch (error) {
+              console.log("Error: Read");
+              console.log(error);
+            } finally {
+              reader.releaseLock();
+              writer.releaseLock();
+            }
+          }
+        } catch (error) {
+          console.log("Error: Open");
+          console.log(error);
+        }
+      }
+      async function stop() {
+        if (typeof writer === "undefined") {
+          return;
+        }
+        const dataBuffer = new ArrayBuffer(4);
+        const dataView = new DataView(dataBuffer);
+        // 0x8001 is command id of gyro offset install
+        dataView.setUint16(0, 0x8001, true);
+        dataView.setUint16(2, 0);
+        try {
+          await writer.write(dataBuffer)
+        } catch (error) {
+          console.log("Error: Write");
+          console.log(error);
+        }
+      }
+
+      async function restart() {
+        csvTextArea.value = "t,qw,qx,qy,qz,ax,ay,az,gx,gy,gz";
+        if (typeof writer === "undefined") {
+          return;
+        }
+        const dataBuffer = new ArrayBuffer(4);
+        const dataView = new DataView(dataBuffer);
+        // 0x8002 is command id of restart gyro install
+        dataView.setUint16(0, 0x8002, true);
+        dataView.setUint16(2, 0);
+        try {
+          await writer.write(dataBuffer);
+          csv_signal = 0;
+        } catch (error) {
+          console.log("Error: Write");
+          console.log(error);
+        }
+      }
+
+      function downloadFile() {
+        let fileName = "sensor_data.csv";
+        const data = csvTextArea.value;
+        let blob = new Blob([data], {
+          type: "application/octet-stream"
+        });
+        var href = URL.createObjectURL(blob);
+        // get data from Blob
+        var link = document.createElement("a");
+        document.body.appendChild(link);
+        link.href = href;
+        link.download = fileName;
+        link.click();
+      }
+
+      function appendCsv(t, qw, qx, qy, qz, ax, ay, az, gx, gy, gz) {
+        let newLine = sprintf("%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f", t,
+         qw.toFixed(precision), qx.toFixed(precision), qy.toFixed(precision), qz.toFixed(precision), 
+         ax.toFixed(precision), ay.toFixed(precision), az.toFixed(precision), 
+         gx.toFixed(precision), gy.toFixed(precision), gz.toFixed(precision));
+         csvTextArea.value += sprintf("\n%s", newLine);
+      }
+
+      
+      var video = document.querySelector("#videoElement");
+
+      if (navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: true })
+          .then(function (stream) {
+            video.srcObject = stream;
+          })
+          .catch(function (err0r) {
+            console.log("抓不到視訊");
+          });
+      }
+
+    </script>
+  </body>
+</html>
