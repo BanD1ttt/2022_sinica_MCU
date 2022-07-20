@@ -101,7 +101,7 @@
                 },
             },],
             yAxes: [{
-                ticks: { min: -1.0, max: 1.0 }
+                ticks: { min: -0.3, max: 1.7 }
             },],
           },
         },
@@ -256,7 +256,7 @@
                         let qz = dataView.getFloat32(offset, true); offset += 4;
                         //console.info(t, /*ax, ay, az, gx, gy, gz,*/ qw, qx, qy, qz);
                         // graph
-                        drawChars(t, qw, qx, qy, qz);
+                        drawChars(t, 0, ax, ay, az);
                     } else if (nextDataId == btnDataId) {
                         let t = dataView.getUint32(true);
                         let x = data[4];

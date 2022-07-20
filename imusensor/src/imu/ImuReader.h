@@ -9,6 +9,7 @@ namespace imu {
 
 class ImuReader {
 public:
+    void acc_rotate(imu::ImuData& imuData);
     explicit ImuReader(m5::IMU_Class& m5);
     bool initialize();
     bool writeGyroOffset(float x, float y, float z);

@@ -16,11 +16,15 @@ public:
     float acc[ImuXyz];
     float gyro[ImuXyz];
     float quat[ImuWxyz];
+    float Q[ImuWxyz] = {1,0,0,0};
+
 
     explicit ImuData() : timestamp(0) {
         memset(this, 0, ImuDataLen);
         quat[0] = 1.0F;
     }
+
+private:
 };
 
 } // imu

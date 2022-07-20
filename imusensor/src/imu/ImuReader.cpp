@@ -1,4 +1,9 @@
 #include "ImuReader.h"
+#include <math.h>
+
+#define SAMPLE_RATE 200
+float T_step = 1 / SAMPLE_RATE;
+
 
 namespace imu {
     ImuReader::ImuReader(m5::IMU_Class& m5) : m5Imu(m5), ahrs(), imuData() {
@@ -50,6 +55,29 @@ namespace imu {
         }
         memcpy(&outImuData, &imuData, ImuDataLen);
         return true;
+    }
+
+
+
+    void ImuReader::acc_rotate(imu::ImuData& imuData)
+    {
+        imuData.Q[0] += imuData.quat[0];
+        imuData.Q[1] += imuData.quat[1];
+        imuData.Q[2] += imuData.quat[2];
+        imuData.Q[3] += imuData.quat[3];
+        double recipNorm = 1/(sqrt(imuData.Q[0] * imuData.Q[0] + imuData.Q[1] * imuData.Q[1] + imuData.Q[2] * imuData.Q[2] + imuData.Q[3] * imuData.Q[3]));
+        imuData.Q[0] *= recipNorm;
+        imuData.Q[1] *= recipNorm;
+        imuData.Q[2] *= recipNorm;
+        imuData.Q[3] *= recipNorm;
+        float aw = 0;
+        float temp_accw = imuData.Q[0] * aw - imuData.Q[1] * imuData.acc[0] - imuData.Q[2] * imuData.acc[1] - imuData.Q[3] * imuData.acc[2];
+        float temp_accx = imuData.Q[0] * imuData.acc[0] + imuData.Q[1] * aw + imuData.Q[2] * imuData.acc[2] - imuData.Q[3] * imuData.acc[1];
+        float temp_accy = imuData.Q[0] * imuData.acc[1] - imuData.Q[1] * imuData.acc[2] + imuData.Q[2] * aw + imuData.Q[3] * imuData.acc[0];
+        float temp_accz = imuData.Q[0] * imuData.acc[2] + imuData.Q[1] * imuData.acc[1] - imuData.Q[2] * imuData.acc[0] + imuData.Q[3] * aw;
+        imuData.acc[0] = -imuData.Q[1] * temp_accw + imuData.Q[0] * temp_accx - imuData.Q[3] * temp_accy + imuData.Q[2] * temp_accz;
+        imuData.acc[1] = -imuData.Q[2] * temp_accw + imuData.Q[3] * temp_accx + imuData.Q[0] * temp_accy - imuData.Q[1] * temp_accz;
+        imuData.acc[2] = -imuData.Q[3] * temp_accw -imuData.Q[2] * temp_accx + imuData.Q[1] * temp_accy + imuData.Q[0] * temp_accz;
     }
 
 } // imu

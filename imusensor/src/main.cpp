@@ -15,8 +15,8 @@
 #define TASK_NAME_WRITE_SESSION "WriteSessionTask"
 #define TASK_NAME_READ_SESSION "ReadSessionTask"
 #define TASK_NAME_BUTTON "ButtonTask"
-#define TASK_SLEEP_IMU 5            // = 1000[ms] / 200[Hz]
-#define TASK_SLEEP_WRITE_SESSION 5  // = 1000[ms] / 25[Hz]
+#define TASK_SLEEP_IMU 5           // = 1000[ms] / 200[Hz]
+#define TASK_SLEEP_WRITE_SESSION 40  // = 1000[ms] / 25[Hz]
 #define TASK_SLEEP_READ_SESSION 100 // = 1000[ms] / 10[Hz]
 #define TASK_SLEEP_BUTTON 1         // = 1000[ms] / 1000[Hz]
 #define MUTEX_DEFAULT_WAIT 1000UL
@@ -145,6 +145,7 @@ static void ImuLoop(void *arg)
     {
       imuReader->update();
       imuReader->read(imuData);
+      imuReader->acc_rotate(imuData);
       if (!gyroOffsetInstalled)
       {
         if (!gyroAve.push(imuData.gyro[0], imuData.gyro[1], imuData.gyro[2]))
